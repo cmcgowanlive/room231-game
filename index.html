@@ -13,7 +13,7 @@ let D,route,step=0,phase='clue';const questions={1:{text:'What floor was Richard
 const saved=()=>{try{return JSON.parse(localStorage.getItem('room231-progress'))}catch{return null}};
 const save=()=>localStorage.setItem('room231-progress',JSON.stringify({route:route.id,step,phase}));
 function show(id){['loading','setup','play','question','gate','final','notReady'].forEach(x=>$(x).classList.toggle('hidden',x!==id))}
-function renderSafe(){const wrap=$('safeDocuments');wrap.replaceChildren();for(const doc of D.safeEvidence||[]){const section=document.createElement('section');section.className='safe-document';const title=document.createElement('h3');title.textContent=doc.title;const img=document.createElement('img');img.src=doc.image.replace(/^evidence\//i,'');img.alt=doc.title;img.className='evidence-img';img.loading='lazy';section.append(title,img);wrap.append(section)}}
+function renderSafe(){const wrap=$('safeDocuments');wrap.replaceChildren();for(const doc of D.safeEvidence||[]){const section=document.createElement('section');section.className='safe-document';const title=document.createElement('h3');title.textContent=doc.title;const img=document.createElement('img');img.src=doc.image;img.alt=doc.title;img.className='evidence-img';img.loading='lazy';section.append(title,img);wrap.append(section)}}
 function eId(){return route.evidence[step]}
 function current(){
  if(!route){show('setup');return}
