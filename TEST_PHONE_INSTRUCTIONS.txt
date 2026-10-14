@@ -1,0 +1,13 @@
+ROOM 231 — RED-1 PHONE TEST
+
+IMPORTANT: These QR codes point to the public GitHub Pages site. First upload this package’s website files to GitHub and wait for deployment.
+
+1. Use the TEST_RED1_START.png QR with your phone camera. Expected: RED-1, Ballroom, Evidence 01.
+2. Scan TEST_WRONG_STATION.png. Expected: warning, no evidence revealed.
+3. Scan TEST_BALLROOM_STATION.png using the SAME phone and browser. Expected: Evidence 01 newspaper clipping appears.
+4. Tap Continue investigation. Expected: next stop Dancing Couple Statue, Evidence 02.
+5. Re-scan Ballroom QR. Expected: wrong-station warning, not Evidence 02.
+
+Note: If your camera app opens scans in different browsers, progress may not carry over. Test with the same browser throughout.
+
+IMPORTANT: These are TEST QRs, not the complete 20-station production print set. Do not publish until clue ordering and physical mounting are checked.

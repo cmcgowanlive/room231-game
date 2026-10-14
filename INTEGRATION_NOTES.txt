@@ -1,0 +1,7 @@
+STAGING ONLY — DO NOT PUBLISH YET.
+
+All 20 approved individual case evidence images are integrated as evidence/E01.png through E20.png. Case 1 Forensic Notebook excluded. Case 2 Hotel Bath Ledger included. Old CASE FINAL decks excluded. Four approved starting documents preserved.
+
+Still unresolved: final four-digit code and Evidence 21 letter; whether the final evidence order beyond starting documents is approved; user-device QR scanning test and station installation check.
+
+CRITICAL: This website currently permits advancing after opening a valid station QR, without proving guests read the evidence. GitHub Pages cannot securely prevent cheating. Test same-browser QR continuity on iPhone.

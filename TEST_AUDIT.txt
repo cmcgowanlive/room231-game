@@ -1,0 +1,8 @@
+Automated static checks PASSED:
+- 16 routes each contain all 20 unique evidence IDs
+- Every case has its five clues in order on every route
+- All 20 evidence images and three safe-evidence images exist
+- Approved station assignments match the data
+- Station matching and local progress storage present in website code
+
+NOT YET VERIFIED: actual browser/camera scanning, public deployment, clue solution accuracy, safe mounting, and crowd movement.

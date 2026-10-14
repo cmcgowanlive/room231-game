@@ -1,0 +1,4 @@
+Print a QR for this URL and place it ONLY inside the CLASSIFIED folder in the physical safe:
+https://cmcgowanlive.github.io/room231-game/?safe=1
+
+This is a public URL if shared; the physical safe provides the practical access control.
