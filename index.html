@@ -86,7 +86,27 @@ function renderClue(){
 function advance(){if(!sync())return showError('Progress is unavailable. Please contact the Game Master.');if(viewingPast)return render();if(state.stage!=='clue'||state.step>=20)return render();const id=evidenceAt();if(!state.unlocked.includes(id)||stationParam!==stationFor(id))return render();if(isCaseEnd(state))state.stage='question';else state.step++;if(!persist(state))return;clearScanURL();render();window.scrollTo(0,0)}
 function renderQuestion(){const id=evidenceAt(),n=caseOf(id);show('question');$('questionTitle').textContent='Case '+n+' · Final Question';$('questionText').textContent=questions[n].text;$('questionAnswer').value='';$('questionFeedback').textContent='';const solved=state.solved[n]===questions[n].answer;$('questionForm').classList.toggle('hidden',solved);$('questionReview').classList.toggle('hidden',solved);$('questionNext')?.remove();if(solved){$('questionFeedback').textContent='Correct! Your Case '+n+' digit is '+questions[n].answer+'. Record it for the physical safe.';const next=document.createElement('button');next.id='questionNext';next.textContent=state.step===19?'Continue to safe →':'Continue to next case →';next.onclick=nextCase;$('question').append(next)}}
 function nextCase(){if(!sync())return showError('Progress is unavailable.');if(state.stage!=='question'||!isCaseEnd(state))return render();const n=caseOf(evidenceAt());if(state.solved[n]!==questions[n].answer)return render();state.step++;state.stage=state.step===20?'safe':'clue';if(!persist(state))return;clearScanURL();render();window.scrollTo(0,0)}
-function caseReview(){if(!sync()||state.stage!=='question')return render();const n=caseOf(evidenceAt());$('reviewList').replaceChildren();for(const id of route().evidence.filter(x=>caseOf(x)===n&&state.unlocked.includes(x))){const b=document.createElement('button');b.type='button';b.textContent='Evidence '+id.slice(1)+' — '+docTitle(id);b.onclick=()=>{if(!sync()||state.stage!=='question'||!state.unlocked.includes(id))return render();$('reviewList').classList.add('hidden');$('reviewImage').classList.remove('hidden');$('reviewTitle').textContent='Case '+n+' · Evidence '+id.slice(1);$('reviewPhoto').src=imageFor(id);$('reviewPhoto').alt=docTitle(id)};$('reviewList').append(b)}$('reviewList').classList.remove('hidden');$('reviewImage').classList.add('hidden');show('review')}
+function renderReviewPhoto(id){
+ const img=$('reviewPhoto');
+ const paths=[imageFor(id),`${id}.jpg`].filter((p,i,a)=>a.indexOf(p)===i);
+ let index=0;
+ img.style.display='block';
+ img.alt=docTitle(id);
+ const oldWarning=$('reviewImage').querySelector('.review-warning');
+ if(oldWarning)oldWarning.remove();
+ img.onerror=()=>{
+  index++;
+  if(index<paths.length){img.src=paths[index];return}
+  img.style.display='none';
+  const warning=document.createElement('p');
+  warning.className='warning review-warning';
+  warning.textContent='This evidence image could not load. Please notify the Game Master.';
+  $('reviewImage').insertBefore(warning,$('reviewBack'));
+ };
+ img.onload=()=>{img.style.display='block'};
+ img.src=paths[index];
+}
+function caseReview(){if(!sync()||state.stage!=='question')return render();const n=caseOf(evidenceAt());$('reviewList').replaceChildren();for(const id of route().evidence.filter(x=>caseOf(x)===n&&state.unlocked.includes(x))){const b=document.createElement('button');b.type='button';b.textContent='Evidence '+id.slice(1)+' — '+docTitle(id);b.onclick=()=>{if(!sync()||state.stage!=='question'||!state.unlocked.includes(id))return render();$('reviewList').classList.add('hidden');$('reviewImage').classList.remove('hidden');$('reviewTitle').textContent='Case '+n+' · Evidence '+id.slice(1);renderReviewPhoto(id)};$('reviewList').append(b)}$('reviewList').classList.remove('hidden');$('reviewImage').classList.add('hidden');show('review')}
 function renderSafe(){const wrap=$('safeDocuments');wrap.replaceChildren();const docs=Array.isArray(D.safeEvidence)&&D.safeEvidence.length?D.safeEvidence:[{title:'Dean Harlowe Note',image:'Dean Harlowe Room.png'},{title:'Barbara Vellrick Newspaper',image:'231 Mystery Newspaper.png'},{title:'O.V. Note',image:'Orson note.png'}];for(const doc of docs){const section=document.createElement('section');section.className='safe-document';const title=document.createElement('h3');title.textContent=doc.title;const img=document.createElement('img');img.src=doc.image;img.alt=doc.title;img.className='evidence-img';img.loading='lazy';img.onerror=()=>{const p=document.createElement('p');p.className='warning';p.textContent='Document image unavailable. Contact the Game Master.';section.append(p)};section.append(title,img);wrap.append(section)}}
 function render(){if(!state){show('setup');return}if(!route()){showError('Your assigned route is unavailable.');return}viewingPast=null;if(safeParam){if(!state){renderSafe();show('final');return}if(state.step===20){if(state.stage==='safe'){state.stage='final';persist(state)}if(state.stage==='gamemaster')show('gamemaster');else {renderSafe();show('final')}}else {renderSafe();show('final')}return}
  if(stationParam){const past=route().evidence.find(id=>state.unlocked.includes(id)&&stationFor(id)===stationParam&&(state.step>=20||id!==evidenceAt()));if(past){renderPast(past);return}}
