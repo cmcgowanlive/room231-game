@@ -14,42 +14,91 @@
 <p>Go to the GAMEMASTER to find the employee records.</p>
 </section>
 <section class="panel hidden" id="notReady"><h2>Organizer setup required</h2><p id="notReadyMsg"></p></section>
-</main><script>let D,route,step=0,phase='clue',station=null,scanned=[];
-const questions={1:{text:'What floor was Richard Fenwick staying on?',answer:'2'},2:{text:'How many times did Charles Pembroke respond to the wellness check?',answer:'0'},3:{text:'How many injuries occurred before Henry Whitlock’s fall?',answer:'2'},4:{text:'How many minutes passed before the corridor was secured and the clock stopped?',answer:'6'}};
-const $=id=>document.getElementById(id);
-const params=new URLSearchParams(location.search),requested=params.get('route'),safeScan=params.get('safe')==='1';
-station=params.get('station');
-const STORAGE='room231-progress',VERSION=5;
-function saved(){try{return JSON.parse(localStorage.getItem(STORAGE))}catch{return null}}
-function save(){localStorage.setItem(STORAGE,JSON.stringify({route:route.id,step,phase,scanned,scanVersion:VERSION}))}
-function show(id){['loading','setup','play','question','gate','final','gamemaster','review','notReady'].forEach(x=>$(x).classList.toggle('hidden',x!==id))}
-function renderSafe(){const wrap=$('safeDocuments');wrap.replaceChildren();for(const doc of D.safeEvidence||[]){const section=document.createElement('section');section.className='safe-document';const title=document.createElement('h3');title.textContent=doc.title;const img=document.createElement('img');img.src=doc.image;img.alt=doc.title;img.className='evidence-img';img.loading='lazy';section.append(title,img);wrap.append(section)}}
-function caseOf(id){return Math.ceil(Number(id.slice(1))/5)}
-function eId(){return route.evidence[step]}
-function routeUrl(){return location.pathname+'?route='+encodeURIComponent(route.id)}
-function clearStation(){station=null;history.replaceState(null,'',routeUrl())}
-function showImage(id){const img=document.createElement('img');img.className='evidence-img';img.src=id+'.jpg';img.alt=D.evidenceTitles?.[id]||id;img.loading='eager';$('evidenceBody').replaceChildren(img)}
-function showPast(id){show('play');$('caseTitle').textContent='Case '+caseOf(id)+' · Evidence '+id.slice(1);$('nextLocation').textContent='';$('nextLabel').textContent='Previously discovered evidence';$('stationMessage').textContent='';$('evidenceTitle').textContent=D.evidenceTitles?.[id]||'Document';showImage(id);$('evidenceArea').classList.remove('hidden');$('play').classList.add('evidence-only');$('advance').textContent='Return to current investigation';$('advance').onclick=()=>{clearStation();current();window.scrollTo(0,0)}}
-function showQuestion(){show('question');const n=caseOf(eId());$('questionTitle').textContent='Case '+n+' · Final Question';$('questionText').textContent=questions[n].text;$('questionAnswer').value='';$('questionFeedback').textContent='';$('questionForm').classList.remove('hidden');$('questionReview').classList.remove('hidden');$('questionNext')?.remove()}
-function current(){
- if(!route){show('setup');return}
- // A previously scanned station is viewable again, but never advances progress.
- if(station){const past=route.evidence.find(id=>scanned.includes(id)&&D.assignments[id]===station&&id!==eId());if(past){showPast(past);return}}
- if(phase==='question'){clearStation();showQuestion();return}
- if(step>=20){clearStation();show('gate');return}
- const id=eId(),loc=D.assignments[id];show('play');$('caseTitle').textContent='Case '+caseOf(id)+' · Evidence '+id.slice(1);$('nextLabel').textContent='Your next clue location:';$('nextLocation').textContent=loc||'LOCATION NOT ASSIGNED';$('evidenceTitle').textContent='Evidence '+id.slice(1)+' — '+(D.evidenceTitles?.[id]||'Document');showImage(id);$('evidenceArea').classList.add('hidden');$('play').classList.remove('evidence-only');$('stationMessage').textContent='Scan the QR code at this location to reveal your evidence.';
- if(!loc){$('stationMessage').textContent='Location not assigned.';return}
- if(station===loc){if(!scanned.includes(id)){scanned.push(id);save()}$('evidenceArea').classList.remove('hidden');$('play').classList.add('evidence-only');$('advance').textContent='Continue investigation →';$('advance').onclick=advance}
- else if(station){$('stationMessage').textContent='This is not your next station. Go to '+loc+' and scan its QR code.'}
+</main><script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const params = new URLSearchParams(location.search);
+let stationParam = params.get('station');
+const routeParam = params.get('route');
+const safeParam = params.get('safe') === '1';
+const STORE = 'room231-investigation-v7';
+const LEGACY = 'room231-progress';
+const questions = {
+  1:{text:'What floor was Richard Fenwick staying on?',answer:'2'},
+  2:{text:'How many times did Charles Pembroke respond to the wellness check?',answer:'0'},
+  3:{text:'How many injuries occurred before Henry Whitlock’s fall?',answer:'2'},
+  4:{text:'How many minutes passed before the corridor was secured and the clock stopped?',answer:'6'}
+};
+let D, state, viewingPast = null, viewingReview = false;
+const validId = x => /^E(0[1-9]|1[0-9]|20)$/.test(x);
+const caseOf = id => Math.ceil(Number(id.slice(1))/5);
+const routeBy = id => D.routes.find(r => r.id === id);
+const route = () => state && routeBy(state.route);
+const evidenceAt = (s=state) => routeBy(s.route).evidence[s.step];
+const stationFor = id => D.assignments[id];
+const imageFor = id => D.evidenceImages?.[id] || `${id}.jpg`;
+const docTitle = id => D.evidenceTitles?.[id] || 'Document';
+const isCaseEnd = s => s.step < 20 && s.step % 5 === 4;
+const blank = id => ({schema:7,route:id,step:0,unlocked:[],solved:{},stage:'clue',updated:Date.now()});
+function show(id){['loading','setup','play','question','gate','final','gamemaster','review','notReady'].forEach(x=>$(x).classList.toggle('hidden',x!==id));}
+function validConfig(d){
+ if(!d || !Array.isArray(d.routes) || d.routes.length!==16 || !d.assignments) throw Error('Game configuration is incomplete: expected 16 routes and station assignments.');
+ const names = new Set(), stations = new Set();
+ for(let i=1;i<=20;i++){const id='E'+String(i).padStart(2,'0');const loc=d.assignments[id];if(typeof loc!=='string'||!loc.trim())throw Error('Missing station for '+id);if(stations.has(loc))throw Error('Duplicate station: '+loc);stations.add(loc);}
+ for(const r of d.routes){if(!r.id || names.has(r.id))throw Error('Duplicate or missing route ID');names.add(r.id);if(!Array.isArray(r.evidence)||r.evidence.length!==20||new Set(r.evidence).size!==20||!r.evidence.every(validId))throw Error('Invalid evidence list in '+r.id);for(let i=0;i<20;i+=5){const chunk=r.evidence.slice(i,i+5);if(new Set(chunk.map(caseOf)).size!==1)throw Error('A case is split across checkpoints in '+r.id)}}
 }
-function advance(){if(!scanned.includes(eId()))return;if((step+1)%5===0){phase='question'}else{step=Math.min(20,step+1)}save();clearStation();current();window.scrollTo(0,0)}
-function choose(id,reset=false){route=D.routes.find(x=>x.id===id);if(!route){show('setup');return}const old=saved();const reuse=!reset&&old?.route===id&&old?.scanVersion===VERSION;step=reuse?Math.min(20,Math.max(0,old.step||0)):0;phase=reuse&&old.phase==='question'?'question':'clue';scanned=reuse&&Array.isArray(old.scanned)?old.scanned.filter(x=>route.evidence.includes(x)):[];save();current()}
-$('start').onclick=()=>{station=null;choose($('routes').value,true)};
-function caseReview(){if(phase!=='question')return;const n=caseOf(eId());$('reviewList').replaceChildren();for(const id of route.evidence.filter(id=>caseOf(id)===n&&scanned.includes(id))){const b=document.createElement('button');b.type='button';b.textContent='Evidence '+id.slice(1)+' — '+(D.evidenceTitles?.[id]||'Document');b.onclick=()=>{show('review');$('reviewList').classList.add('hidden');$('reviewImage').classList.remove('hidden');$('reviewTitle').textContent='Case '+n+' · Evidence '+id.slice(1);$('reviewPhoto').src=id+'.jpg';$('reviewPhoto').alt=D.evidenceTitles?.[id]||id};$('reviewList').append(b)}$('reviewList').classList.remove('hidden');$('reviewImage').classList.add('hidden');show('review')}
+function sanitize(raw){
+ if(!raw||!routeBy(raw.route))return null;
+ const r=routeBy(raw.route), s=blank(r.id);
+ const step=Number(raw.step);
+ if(!Number.isInteger(step)||step<0||step>20)return null;
+ s.step=step;
+ const prior = new Set(r.evidence.slice(0,step));
+ const candidate = Array.isArray(raw.unlocked)?raw.unlocked:[];
+ s.unlocked=[...new Set(candidate.filter(x=>validId(x)&&r.evidence.includes(x)))];
+ const solved=raw.solved && typeof raw.solved==='object'?raw.solved:{};
+ for(let i=0;i+5<=step;i+=5){const n=caseOf(r.evidence[i]);if(String(solved[n])===questions[n].answer)s.solved[n]=questions[n].answer;}
+ if(step===20){if(Object.keys(s.solved).length!==4)return null;s.stage=['safe','final','gamemaster'].includes(raw.stage)?raw.stage:'safe';}
+ else if(raw.stage==='question' && isCaseEnd(s) && s.unlocked.includes(r.evidence[step])){s.stage='question';if(String(solved[caseOf(r.evidence[step])])===questions[caseOf(r.evidence[step])].answer)s.solved[caseOf(r.evidence[step])]=questions[caseOf(r.evidence[step])].answer;}
+ else s.stage='clue';
+ // Prior checkpoints require their case to have been solved and all five evidence IDs unlocked.
+ for(let i=0;i+5<=step;i+=5){const group=r.evidence.slice(i,i+5);if(group.length===5 && (!group.every(id=>s.unlocked.includes(id))||!s.solved[caseOf(group[0])]))return null;}
+ if(s.stage==='question'&&!r.evidence.slice(step-step%5,step+1).every(id=>s.unlocked.includes(id)))return null;
+ s.updated=Number(raw.updated)||Date.now();return s;
+}
+function load(){try{return sanitize(JSON.parse(localStorage.getItem(STORE)))}catch{return null}}
+function persist(s){s.updated=Date.now();try{localStorage.setItem(STORE,JSON.stringify(s));return true}catch{showError('Your browser is blocking game progress storage. Allow site storage or use a regular browser tab before continuing.');return false}}
+function showError(message){show('notReady');$('notReadyMsg').textContent=message;}
+function sync(){const latest=load();if(latest){state=latest;return true}return false}
+function start(id){if(!routeBy(id))return showError('Unknown route: '+id);const old=load();if(old&&old.route!==id&&!confirm('This browser already has progress for '+old.route+'. Switch to '+id+' and restart?')){state=old;return render()};state=old&&old.route===id?old:blank(id);if(!persist(state))return;render()}
+function setURL(query){history.replaceState(null,'',location.pathname+query)}
+function clearScanURL(){stationParam=null;setURL('?route='+encodeURIComponent(state.route))}
+function currentStation(){const id=evidenceAt();return stationFor(id)}
+function renderImage(id,target){target.replaceChildren();const img=document.createElement('img');img.className='evidence-img';img.src=imageFor(id);img.alt=docTitle(id);img.loading='eager';img.onerror=()=>{if(!img.dataset.fallback && img.src.indexOf(id+'.jpg')===-1){img.dataset.fallback='1';img.src=id+'.jpg';return}const msg=document.createElement('p');msg.className='warning';msg.textContent='This evidence image could not load. Please notify the Game Master. Do not advance until the image is available.';target.append(msg);if(target===$('evidenceBody'))$('advance').disabled=true};target.append(img)}
+function renderPast(id){viewingPast=id;show('play');$('play').classList.add('evidence-only');$('caseTitle').textContent='Case '+caseOf(id)+' · Evidence '+id.slice(1);$('nextLabel').textContent='Previously discovered evidence';$('nextLocation').textContent='';$('stationMessage').textContent='';$('evidenceTitle').textContent=docTitle(id);$('evidenceArea').classList.remove('hidden');$('advance').disabled=false;$('advance').textContent='Return to current investigation';renderImage(id,$('evidenceBody'));$('advance').onclick=()=>{viewingPast=null;clearScanURL();render()}}
+function renderClue(){
+ const id=evidenceAt(), loc=currentStation();show('play');$('play').classList.remove('evidence-only');$('caseTitle').textContent='Case '+caseOf(id)+' · Evidence '+id.slice(1);$('nextLabel').textContent='Your next clue location:';$('nextLocation').textContent=loc;$('evidenceTitle').textContent='Evidence '+id.slice(1)+' — '+docTitle(id);$('evidenceArea').classList.add('hidden');$('advance').disabled=false;
+ const scannedNow=stationParam===loc;
+ if(scannedNow){if(!state.unlocked.includes(id)){state.unlocked.push(id);if(!persist(state))return}$('evidenceArea').classList.remove('hidden');$('play').classList.add('evidence-only');renderImage(id,$('evidenceBody'));$('advance').textContent='Continue Investigation →';$('advance').onclick=advance;}
+ else {$('stationMessage').textContent=stationParam?'This is not your next station. Go to '+loc+' and scan its QR code.':'Scan the QR code at this location to reveal your evidence.';}
+}
+function advance(){if(!sync())return showError('Progress is unavailable. Please contact the Game Master.');if(viewingPast)return render();if(state.stage!=='clue'||state.step>=20)return render();const id=evidenceAt();if(!state.unlocked.includes(id)||stationParam!==stationFor(id))return render();if(isCaseEnd(state))state.stage='question';else state.step++;if(!persist(state))return;clearScanURL();render();window.scrollTo(0,0)}
+function renderQuestion(){const id=evidenceAt(),n=caseOf(id);show('question');$('questionTitle').textContent='Case '+n+' · Final Question';$('questionText').textContent=questions[n].text;$('questionAnswer').value='';$('questionFeedback').textContent='';const solved=state.solved[n]===questions[n].answer;$('questionForm').classList.toggle('hidden',solved);$('questionReview').classList.toggle('hidden',solved);$('questionNext')?.remove();if(solved){$('questionFeedback').textContent='Correct! Your Case '+n+' digit is '+questions[n].answer+'. Record it for the physical safe.';const next=document.createElement('button');next.id='questionNext';next.textContent=state.step===19?'Continue to safe →':'Continue to next case →';next.onclick=nextCase;$('question').append(next)}}
+function nextCase(){if(!sync())return showError('Progress is unavailable.');if(state.stage!=='question'||!isCaseEnd(state))return render();const n=caseOf(evidenceAt());if(state.solved[n]!==questions[n].answer)return render();state.step++;state.stage=state.step===20?'safe':'clue';if(!persist(state))return;clearScanURL();render();window.scrollTo(0,0)}
+function caseReview(){if(!sync()||state.stage!=='question')return render();const n=caseOf(evidenceAt());$('reviewList').replaceChildren();for(const id of route().evidence.filter(x=>caseOf(x)===n&&state.unlocked.includes(x))){const b=document.createElement('button');b.type='button';b.textContent='Evidence '+id.slice(1)+' — '+docTitle(id);b.onclick=()=>{if(!sync()||state.stage!=='question'||!state.unlocked.includes(id))return render();$('reviewList').classList.add('hidden');$('reviewImage').classList.remove('hidden');$('reviewTitle').textContent='Case '+n+' · Evidence '+id.slice(1);$('reviewPhoto').src=imageFor(id);$('reviewPhoto').alt=docTitle(id)};$('reviewList').append(b)}$('reviewList').classList.remove('hidden');$('reviewImage').classList.add('hidden');show('review')}
+function renderSafe(){const wrap=$('safeDocuments');wrap.replaceChildren();const docs=Array.isArray(D.safeEvidence)&&D.safeEvidence.length?D.safeEvidence:[{title:'Dean Harlowe Note',image:'Dean Harlowe Room.png'},{title:'Barbara Vellrick Newspaper',image:'231 Mystery Newspaper.png'},{title:'O.V. Note',image:'Orson note.png'}];for(const doc of docs){const section=document.createElement('section');section.className='safe-document';const title=document.createElement('h3');title.textContent=doc.title;const img=document.createElement('img');img.src=doc.image;img.alt=doc.title;img.className='evidence-img';img.loading='lazy';img.onerror=()=>{const p=document.createElement('p');p.className='warning';p.textContent='Document image unavailable. Contact the Game Master.';section.append(p)};section.append(title,img);wrap.append(section)}}
+function render(){if(!state){show('setup');return}if(!route()){showError('Your assigned route is unavailable.');return}viewingPast=null;if(safeParam){if(!state){renderSafe();show('final');return}if(state.step===20){if(state.stage==='safe'){state.stage='final';persist(state)}if(state.stage==='gamemaster')show('gamemaster');else {renderSafe();show('final')}}else {renderSafe();show('final')}return}
+ if(stationParam){const past=route().evidence.find(id=>state.unlocked.includes(id)&&stationFor(id)===stationParam&&(state.step>=20||id!==evidenceAt()));if(past){renderPast(past);return}}
+ if(state.stage==='gamemaster'){show('gamemaster');return}if(state.stage==='final'){renderSafe();show('final');return}if(state.stage==='safe'||state.step===20){show('gate');return}if(state.stage==='question'){renderQuestion();return}renderClue()}
+$('start').onclick=()=>start($('routes').value);
 $('questionReview').onclick=caseReview;
 $('reviewBack').onclick=()=>{$('reviewImage').classList.add('hidden');$('reviewList').classList.remove('hidden')};
-$('reviewReturn').onclick=()=>show('question');
-$('questionForm').onsubmit=e=>{e.preventDefault();const n=caseOf(eId());if($('questionAnswer').value.trim()!==questions[n].answer){$('questionFeedback').textContent='Not quite. Review the evidence and try again.';return} $('questionFeedback').textContent='Correct! Your Case '+n+' digit is '+questions[n].answer+'. Record it for the physical safe.';$('questionForm').classList.add('hidden');$('questionReview').classList.add('hidden');const next=document.createElement('button');next.id='questionNext';next.textContent=step===19?'Continue to safe →':'Continue to next case →';next.onclick=()=>{step=Math.min(20,step+1);phase='clue';save();next.remove();current();window.scrollTo(0,0)};$('question').append(next)};
-fetch('./game-data.json').then(r=>{if(!r.ok)throw Error('Could not load game-data.json');return r.json()}).then(d=>{D=d;$('routes').replaceChildren(...D.routes.map(r=>{const o=document.createElement('option');o.value=r.id;o.textContent=r.id;return o}));const old=saved();if(safeScan){renderSafe();show('final')}else if(requested){choose(requested,old?.route!==requested)}else if(old){choose(old.route)}else{show('setup')}}).catch(e=>{show('notReady');$('notReadyMsg').textContent=e.message+' — Open this website through a web host, not directly from your Downloads folder.'});
-$('finalContinue').addEventListener('click',()=>show('gamemaster'));
+$('reviewReturn').onclick=()=>{sync();renderQuestion()};
+$('questionForm').onsubmit=e=>{e.preventDefault();if(!sync()||state.stage!=='question')return render();const n=caseOf(evidenceAt());if($('questionAnswer').value.trim()!==questions[n].answer){$('questionFeedback').textContent='Not quite. Review the evidence and try again.';return}state.solved[n]=questions[n].answer;if(!persist(state))return;renderQuestion()};
+$('finalContinue').onclick=()=>{if(!sync()){show('gamemaster');return}if(state.step!==20){show('gamemaster');return}state.stage='gamemaster';if(!persist(state))return;setURL('?route='+encodeURIComponent(state.route));render()};
+window.addEventListener('storage',e=>{if(e.key===STORE){sync();render()}});
+window.addEventListener('pageshow',e=>{if(e.persisted){sync();render()}});
+fetch('./game-data.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Could not load game-data.json');return r.json()}).then(d=>{validConfig(d);D=d;$('routes').replaceChildren(...D.routes.map(r=>{const o=document.createElement('option');o.value=r.id;o.textContent=r.id;return o}));state=load();if(routeParam){if(!routeBy(routeParam))return showError('Unknown route: '+routeParam);if(state&&state.route!==routeParam){show('setup');$('routes').value=routeParam;return}if(!state)state=blank(routeParam);if(!persist(state))return}else if(!state){if(safeParam){renderSafe();show('final');return}show('setup');return}render()}).catch(e=>showError(e.message+' Please contact the Game Master.'));
+})();
 </script></body></html>
