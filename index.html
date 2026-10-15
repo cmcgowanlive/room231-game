@@ -15,13 +15,13 @@
  <section class="panel hidden" id="notReady"><h2>Organizer setup required</h2><p id="notReadyMsg"></p></section>
 </main><script>
 let D,route,step=0,phase='clue';const questions={1:{text:'What floor was Richard Fenwick staying on?',answer:'2'},2:{text:'How many times did Charles Pembroke respond to the wellness check?',answer:'0'},3:{text:'How many injuries occurred before Henry Whitlock’s fall?',answer:'2'},4:{text:'How many minutes passed before the corridor was secured and the clock stopped?',answer:'6'}};const $=id=>document.getElementById(id);const p=new URLSearchParams(location.search),requested=p.get('route'),safeScan=p.get('safe')==='1';
-let station=p.get('station');
+let station=p.get('station'),scanned=[];
 const saved=()=>{try{return JSON.parse(localStorage.getItem('room231-progress'))}catch{return null}};
-const save=()=>localStorage.setItem('room231-progress',JSON.stringify({route:route.id,step,phase}));
+const save=()=>localStorage.setItem('room231-progress',JSON.stringify({route:route.id,step,phase,scanned}));
 function show(id){['loading','setup','play','question','gate','final','gamemaster','review','notReady'].forEach(x=>$(x).classList.toggle('hidden',x!==id))}
 function renderSafe(){const wrap=$('safeDocuments');wrap.replaceChildren();for(const doc of D.safeEvidence||[]){const section=document.createElement('section');section.className='safe-document';const title=document.createElement('h3');title.textContent=doc.title;const img=document.createElement('img');img.src=doc.image;img.alt=doc.title;img.className='evidence-img';img.loading='lazy';section.append(title,img);wrap.append(section)}}
 function eId(){return route.evidence[step]}
-function collectedIds(){if(!route)return [];const count=Math.min(20,step+(phase==='question'?1:0));return route.evidence.slice(0,count)}
+function collectedIds(){if(!route)return [];return route.evidence.filter(id=>scanned.includes(id))}
 function reviewEvidence(id){
  if(!collectedIds().includes(id))return;
  show('review');$('reviewList').classList.add('hidden');$('reviewImage').classList.remove('hidden');$('reviewBack').classList.remove('hidden');
@@ -38,7 +38,7 @@ $('openReview').onclick=reviewList;$('reviewBack').onclick=reviewList;$('reviewR
 
 function current(){
  if(!route){show('setup');return}
- const previousAtStation=station?collectedIds().find(id=>D.assignments[id]===station):null;
+ const previousAtStation=station?collectedIds().find(id=>D.assignments[id]===station && (id!==eId() || phase==='question' || step>=20)):null;
  if(previousAtStation){reviewEvidence(previousAtStation);return}
  if(phase==='question'){
    show('question');let last=route.evidence[step],n=Math.ceil(Number(last.slice(1))/5);
@@ -55,10 +55,10 @@ function current(){
  $('evidenceArea').classList.add('hidden');$('play').classList.remove('evidence-only');
  $('stationMessage').textContent='Scan the QR code at this location to reveal your evidence.';
  if(!loc){$('stationMessage').textContent='Location not assigned.';return}
- if(station===loc){$('evidenceArea').classList.remove('hidden');$('play').classList.add('evidence-only')}
+ if(station===loc){if(!scanned.includes(id)){scanned.push(id);save()}$('evidenceArea').classList.remove('hidden');$('play').classList.add('evidence-only')}
  else if(station){$('stationMessage').textContent='Wrong station. Go to '+loc+' and scan its QR code.'}
 }
-function choose(id,reset=false){route=D.routes.find(x=>x.id===id);if(!route){show('setup');return}step=reset?0:(saved()?.route===id?saved().step:0);phase=reset?'clue':(saved()?.route===id?saved().phase||'clue':'clue');save();current()}
+function choose(id,reset=false){route=D.routes.find(x=>x.id===id);if(!route){show('setup');return}step=reset?0:(saved()?.route===id?saved().step:0);phase=reset?'clue':(saved()?.route===id?saved().phase||'clue':'clue');scanned=reset?[]:(saved()?.route===id && Array.isArray(saved().scanned)?saved().scanned:[]);save();current()}
 $('start').onclick=()=>choose($('routes').value,true);
 $('advance').onclick=()=>{if((step+1)%5===0){phase='question'}else{step=Math.min(20,step+1)}save();history.replaceState(null,'',location.pathname+'?route='+encodeURIComponent(route.id));current();window.scrollTo(0,0)};
 $('questionForm').onsubmit=e=>{e.preventDefault();const id=route.evidence[step],n=Math.ceil(Number(id.slice(1))/5);if($('questionAnswer').value.trim()!==questions[n].answer){$('questionFeedback').textContent='Not quite. Review the evidence and try again.';return} $('questionFeedback').textContent='Correct! Your Case '+n+' digit is '+questions[n].answer+'. Record it for the physical safe.';$('questionForm').classList.add('hidden');const next=document.createElement('button');next.textContent=step===19?'Continue to safe →':'Continue to next case →';next.onclick=()=>{step=Math.min(20,step+1);phase='clue';save();$('questionForm').classList.remove('hidden');next.remove();current();window.scrollTo(0,0)};$('question').append(next)};
